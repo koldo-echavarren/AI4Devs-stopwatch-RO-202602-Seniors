@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stopwatch and Countdown</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Outfit:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              page: "#dbdbdb",
+              panel: "#d9dbec",
+              border: "#313131",
+              greenButton: "#25f700",
+              redButton: "#ff190d",
+            },
+            fontFamily: {
+              display: ['"Archivo Black"', "sans-serif"],
+              body: ['"Outfit"', "sans-serif"],
+            },
+            boxShadow: {
+              panel: "0 10px 28px rgba(0, 0, 0, 0.14)",
+            },
+          },
+        },
+      };
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body {
+        font-family: "Outfit", sans-serif;
+        border-top: 5px solid #0c46aa;
+      }
+
+      .timer-shell {
+        border: 6px solid #313131;
+        border-radius: 2.25rem;
+        background: #d9dbec;
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+      }
+
+      .timer-digits {
+        font-family: "Archivo Black", sans-serif;
+        font-size: clamp(3.2rem, 11vw, 8.8rem);
+        line-height: 0.9;
+        letter-spacing: -0.12em;
+      }
+
+      .timer-milliseconds {
+        font-family: "Outfit", sans-serif;
+        font-size: clamp(1.75rem, 3vw, 3rem);
+        line-height: 1;
+      }
+
+      .action-button {
+        border: 6px solid #313131;
+        border-radius: 1.35rem;
+        min-height: clamp(6.4rem, 18vw, 8.75rem);
+        font-size: clamp(2.4rem, 6vw, 4.2rem);
+        line-height: 1;
+        transition: transform 140ms ease, filter 140ms ease;
+        box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+      }
+
+      .action-button:hover {
+        filter: brightness(1.03);
+      }
+
+      .action-button:active {
+        transform: translateY(2px) scale(0.995);
+      }
+
+      .action-button:disabled {
+        cursor: not-allowed;
+        filter: grayscale(0.28);
+        opacity: 0.6;
+      }
+
+      .primary-idle {
+        background: #67e440;
+      }
+
+      .primary-running {
+        background: #25f700;
+      }
+
+      .primary-paused {
+        background: linear-gradient(180deg, #1cecff 0%, #0132ff 100%);
+      }
+
+      .clear-button {
+        background: #ff190d;
+      }
+
+      .keypad-button {
+        border: 6px solid #313131;
+        border-radius: 1rem;
+        min-height: clamp(4.5rem, 11vw, 5.8rem);
+        font-size: clamp(2rem, 5.2vw, 3.3rem);
+        line-height: 1;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.12);
+      }
+
+      .keypad-grid {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.75fr);
+      }
+
+      .mode-card {
+        min-height: min(72vh, 44rem);
+      }
+
+      .mode-card svg {
+        width: min(62vw, 18rem);
+        max-width: 18rem;
+      }
+
+      .screen-hidden {
+        display: none;
+      }
+
+      .flash-alarm {
+        animation: flash-page 640ms steps(2, end) infinite;
+      }
+
+      .flash-alarm .timer-shell,
+      .flash-alarm .action-button {
+        animation: flash-component 640ms steps(2, end) infinite;
+      }
+
+      @keyframes flash-page {
+        0%,
+        100% {
+          background: #dbdbdb;
+        }
+
+        50% {
+          background: #ffd6d1;
+        }
+      }
+
+      @keyframes flash-component {
+        0%,
+        100% {
+          box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+        }
+
+        50% {
+          box-shadow: 0 0 0 8px rgba(255, 0, 0, 0.22);
+        }
+      }
+
+      @media (max-width: 640px) {
+        .timer-shell {
+          border-width: 4px;
+          border-radius: 1.6rem;
+        }
+
+        .action-button,
+        .keypad-button {
+          border-width: 4px;
+        }
+
+        .keypad-grid {
+          gap: 0.55rem;
+        }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen bg-page text-black">
+    <div
+      id="app"
+      class="mx-auto flex min-h-[calc(100vh-5px)] w-full max-w-[1280px] items-center justify-center px-4 py-4 sm:px-6 sm:py-6 lg:px-10"
+    >
+      <div class="w-full">
+        <div
+          id="error-banner"
+          class="mb-4 hidden rounded-2xl border-4 border-[#8f1f16] bg-[#ffe2df] px-4 py-3 text-base font-medium text-[#5b100a] shadow-panel"
+          role="alert"
+        ></div>
+
+        <section id="screen-initial" class="mx-auto w-full max-w-[960px]">
+          <div
+            class="grid overflow-hidden rounded-[2rem] border-[3px] border-[#d9dbec] bg-[#efefef] shadow-panel md:grid-cols-2"
+          >
+            <button
+              type="button"
+              data-mode="stopwatch"
+              class="mode-card flex w-full flex-col items-center justify-center gap-8 bg-[#d7dfd9] px-8 py-10 text-center transition hover:brightness-[1.02] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0c46aa]/40"
+            >
+              <span class="font-body text-[clamp(2.4rem,5vw,4.4rem)] font-medium">Stopwatch</span>
+              <svg viewBox="0 0 220 220" aria-hidden="true">
+                <defs>
+                  <linearGradient id="upArrowGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+                    <stop offset="0%" stop-color="#9feea5" />
+                    <stop offset="52%" stop-color="#31eb4d" />
+                    <stop offset="100%" stop-color="#5afb70" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M110 20 L178 98 Q184 106 177 116 Q170 124 156 124 H144 L150 192 Q152 208 136 208 H84 Q68 208 70 192 L76 124 H64 Q50 124 43 116 Q36 106 42 98 Z"
+                  fill="url(#upArrowGradient)"
+                  stroke="#313131"
+                  stroke-width="8"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M92 38 C70 58 64 102 68 174"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.38)"
+                  stroke-linecap="round"
+                  stroke-width="22"
+                />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              data-mode="countdown"
+              class="mode-card flex w-full flex-col items-center justify-center gap-8 bg-[#ececec] px-8 py-10 text-center transition hover:brightness-[1.02] focus:outline-none focus-visible:ring-4 focus-visible:ring-[#0c46aa]/40"
+            >
+              <span class="font-body text-[clamp(2.4rem,5vw,4.4rem)] font-medium">Countdown</span>
+              <svg viewBox="0 0 220 220" aria-hidden="true">
+                <defs>
+                  <linearGradient id="downArrowGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stop-color="#ff1c1c" />
+                    <stop offset="60%" stop-color="#ff4545" />
+                    <stop offset="100%" stop-color="#f3a0a0" />
+                  </linearGradient>
+                </defs>
+                <path
+                  d="M110 200 L42 122 Q36 114 43 104 Q50 96 64 96 H76 L70 28 Q68 12 84 12 H136 Q152 12 150 28 L144 96 H156 Q170 96 177 104 Q184 114 178 122 Z"
+                  fill="url(#downArrowGradient)"
+                  stroke="#313131"
+                  stroke-width="8"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M130 28 C145 54 146 104 140 176"
+                  fill="none"
+                  stroke="rgba(255,255,255,0.36)"
+                  stroke-linecap="round"
+                  stroke-width="22"
+                />
+              </svg>
+            </button>
+          </div>
+        </section>
+
+        <section id="screen-stopwatch" class="screen-hidden mx-auto w-full max-w-[960px]">
+          <div class="space-y-8 sm:space-y-10">
+            <div class="timer-shell px-5 py-4 sm:px-8 sm:py-5">
+              <div class="flex flex-col items-end justify-center gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div
+                  id="stopwatch-time"
+                  class="timer-digits w-full overflow-hidden text-center sm:text-left"
+                  aria-live="polite"
+                >
+                  00:00:00
+                </div>
+                <div id="stopwatch-milliseconds" class="timer-milliseconds min-w-[4ch] text-right">000</div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-8">
+              <button
+                id="stopwatch-primary"
+                type="button"
+                class="action-button primary-idle w-full px-5 py-4 font-body font-medium"
+              >
+                Start
+              </button>
+              <button
+                id="stopwatch-clear"
+                type="button"
+                class="action-button clear-button w-full px-5 py-4 font-body font-medium"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-countdown-setup" class="screen-hidden mx-auto w-full max-w-[960px]">
+          <div class="space-y-6 sm:space-y-8">
+            <div class="timer-shell px-5 py-4 sm:px-8 sm:py-5">
+              <div class="flex flex-col items-end justify-center gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div
+                  id="countdown-setup-time"
+                  class="timer-digits w-full overflow-hidden text-center sm:text-left"
+                  aria-live="polite"
+                >
+                  00:00:00
+                </div>
+                <div class="timer-milliseconds min-w-[4ch] text-right">000</div>
+              </div>
+            </div>
+
+            <div class="keypad-grid gap-3 sm:gap-4">
+              <button type="button" data-digit="5" class="keypad-button bg-greenButton font-body font-medium">5</button>
+              <button type="button" data-digit="6" class="keypad-button bg-greenButton font-body font-medium">6</button>
+              <button type="button" data-digit="7" class="keypad-button bg-greenButton font-body font-medium">7</button>
+              <button type="button" data-digit="8" class="keypad-button bg-greenButton font-body font-medium">8</button>
+              <button type="button" data-digit="9" class="keypad-button bg-greenButton font-body font-medium">9</button>
+              <button
+                id="countdown-set"
+                type="button"
+                class="keypad-button bg-greenButton px-4 font-body font-medium"
+              >
+                Set
+              </button>
+              <button type="button" data-digit="0" class="keypad-button bg-greenButton font-body font-medium">0</button>
+              <button type="button" data-digit="1" class="keypad-button bg-greenButton font-body font-medium">1</button>
+              <button type="button" data-digit="2" class="keypad-button bg-greenButton font-body font-medium">2</button>
+              <button type="button" data-digit="3" class="keypad-button bg-greenButton font-body font-medium">3</button>
+              <button type="button" data-digit="4" class="keypad-button bg-greenButton font-body font-medium">4</button>
+              <button
+                id="countdown-setup-clear"
+                type="button"
+                class="keypad-button bg-[#cfcfcf] px-4 font-body font-medium"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section id="screen-countdown-runtime" class="screen-hidden mx-auto w-full max-w-[960px]">
+          <div class="space-y-8 sm:space-y-10">
+            <div class="timer-shell px-5 py-4 sm:px-8 sm:py-5">
+              <div class="flex flex-col items-end justify-center gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div
+                  id="countdown-runtime-time"
+                  class="timer-digits w-full overflow-hidden text-center sm:text-left"
+                  aria-live="polite"
+                >
+                  00:00:00
+                </div>
+                <div id="countdown-runtime-milliseconds" class="timer-milliseconds min-w-[4ch] text-right">
+                  000
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-8">
+              <button
+                id="countdown-primary"
+                type="button"
+                class="action-button primary-idle w-full px-5 py-4 font-body font-medium"
+              >
+                Start
+              </button>
+              <button
+                id="countdown-runtime-clear"
+                type="button"
+                class="action-button clear-button w-full px-5 py-4 font-body font-medium"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="./script.js" defer></script>
+  </body>
+</html>
